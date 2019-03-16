@@ -9,4 +9,4 @@ CC=gcc
 CFLAGS= -std=c99 -pedantic -Wall -Wextra -g
 
 server: server.c
-	$(CC) $(CFLAGS) hello.c -o hello
+	$(CC) $(CFLAGS) server.c -o server
