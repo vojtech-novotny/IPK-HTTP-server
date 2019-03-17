@@ -54,10 +54,6 @@ void error(int error_code, const char * error_message);
 /// @param  port_number The number of the port the server should use.
 void server (const int port_number);
 
-/// Super lightweight version of the server for testing.
-/// @param  port_number The number of the port the server should use.
-void small_server (const int port_number);
-
 /// Handler called when ctrl+c is pressed.
 /// @param  dummy   I don't know why, but it has to be there.
 void close_handler (int dummy);
@@ -132,7 +128,12 @@ void server (const int port_number) {
     const char response_AJ[] = "application/json";
     const char response_CL[] = "\r\nContent-Length: ";
     const char response_NL[] = "\r\n\r\n";
-    const char response_default[] = "This is the default response.\nRequest objects:\n /hostname to find out name of the host\n /cpu-name to find out model name of the cpu\n /load to find out current cpu load\n / (empty) to see this page";
+    const char response_default[] = "This is the default response.\nRequest objects:\n /hostname to find out name of the host\n /cpu-name to find out model name of the cpu\n /load to find out current cpu load\n / (index) to see this page";
+
+    // Error responses
+    const char response_Not_Found[] = "HTTP/1.1 404 Not Found\r\n\r\n";
+    const char response_Not_Acceptable[] = "HTTP/1.1 406 Not Acceptable\r\n\r\n";
+    const char response_Not_Implemented[] = "HTTP/1.1 501 Not Implemented\r\n\r\n";
 
     Output_Format output_format = OF_UNKNOWN;
 
@@ -150,6 +151,7 @@ void server (const int port_number) {
     char analyzer[1024];
     char * current_token;
     char * found_string;
+    int token_difference = 0;
 
     // Server service loop.
     int client_socket;
@@ -168,7 +170,7 @@ void server (const int port_number) {
             break;
         }
 
-        printf("###\n###\n Got a message:\n%s\n", buffer);
+        //printf("###\n###\n Got a message:\n%s\n", buffer);
 
         memcpy(analyzer, buffer, message_length);
 
@@ -184,143 +186,86 @@ void server (const int port_number) {
         current_token = strtok(analyzer, " \n");
         if (output_format == OF_TP) {
             // If the request is GET request
-            if ((found_string = strstr(current_token, "GET")) != NULL) {
+            if ((token_difference = strcmp(current_token, "GET")) == 0) {
 
                 // Analyzing object path
                 current_token = strtok(NULL, " \n");
 
                 // Hostname
-                if ((found_string = strstr(current_token, "/hostname")) != NULL) {
+                if ((token_difference = strcmp(current_token, "/hostname")) == 0) {
                     snprintf(response, sizeof(response), "%s%s%s%ld%s%s", response_OK, response_TP, response_CL, strlen(hostname), response_NL,  hostname);
 
                 // CPU Name
-                } else if ((found_string = strstr(current_token, "/cpu-name")) != NULL) {
+                } else if ((token_difference = strcmp(current_token, "/cpu-name")) == 0) {
                     snprintf(response, sizeof(response), "%s%s%s%ld%s%s", response_OK, response_TP, response_CL, strlen(cpuname), response_NL,  cpuname);
 
                 // CPU Load
-                } else if ((found_string = strstr(current_token, "/load")) != NULL) {
+                } else if ((token_difference = strcmp(current_token, "/load")) == 0) {
                     cpuload = get_load();
                     snprintf(cpuload_string, sizeof(cpuload_string), "%d %%", cpuload);
                     snprintf(response, sizeof(response), "%s%s%s%ld%s%s", response_OK, response_TP, response_CL, strlen(cpuload_string), response_NL, cpuload_string);
 
-            // Else
-                } else {
+                // CPU Load refresh - Not Implemented
+                } else if ((found_string = strstr(current_token, "/load?refresh=")) != NULL) {
+                    snprintf(response, sizeof(response), response_Not_Implemented);
+
+                // Index response
+                } else if ((token_difference = strcmp(current_token, "/")) == 0) {
                     snprintf(response, sizeof(response), "%s%s%s%ld%s%s", response_OK, response_TP, response_CL, sizeof(response_default) - 1, response_NL, response_default);
+
+                // Default response
+                } else {
+                    snprintf(response, sizeof(response), response_Not_Found);
                 }
             } else {
                 snprintf(response, sizeof(response), "%s%s%s%ld%s%s", response_OK, response_TP, response_CL, sizeof(response_default) - 1, response_NL, response_default);
             }
         } else if (output_format == OF_AJ) {
             // If the request is GET request
-            if ((found_string = strstr(current_token, "GET")) != NULL) {
+            if ((token_difference = strcmp(current_token, "GET")) == 0) {
 
                 // Analyzing object path
                 current_token = strtok(NULL, " \n");
 
                 // Hostname
-                if ((found_string = strstr(current_token, "/hostname")) != NULL) {
+                if ((token_difference = strcmp(current_token, "/hostname")) == 0) {
                     snprintf(response, sizeof(response), "%s%s%s%ld%s{\"hostname\": %s}", response_OK, response_AJ, response_CL, strlen(hostname) + 14, response_NL,  hostname);
 
                 // CPU Name
-                } else if ((found_string = strstr(current_token, "/cpu-name")) != NULL) {
+                } else if ((token_difference = strcmp(current_token, "/cpu-name")) == 0) {
                     snprintf(response, sizeof(response), "%s%s%s%ld%s{\"cpu-name\": %s}", response_OK, response_AJ, response_CL, strlen(cpuname) + 14, response_NL,  cpuname);
 
                 // CPU Load
-                } else if ((found_string = strstr(current_token, "/load")) != NULL) {
+                } else if ((token_difference = strcmp(current_token, "/load")) == 0) {
                     cpuload = get_load();
                     snprintf(cpuload_string, sizeof(cpuload_string), "%d %%", cpuload);
                     snprintf(response, sizeof(response), "%s%s%s%ld%s{\"load\": %s}", response_OK, response_AJ, response_CL, strlen(cpuload_string) + 10, response_NL, cpuload_string);
 
-            // Else
-                } else {
+                // CPU Load refresh - Not Implemented
+                } else if ((found_string = strstr(current_token, "/load?refresh=")) != NULL) {
+                    snprintf(response, sizeof(response), response_Not_Implemented);
+
+                // Index response
+                } else if ((token_difference = strcmp(current_token, "/")) == 0) {
                     snprintf(response, sizeof(response), "%s%s%s%ld%s\"%s\"", response_OK, response_AJ, response_CL, sizeof(response_default) + 1, response_NL, response_default);
+
+                // Default response
+                } else {
+                    snprintf(response, sizeof(response), response_Not_Found);
                 }
             } else {
                 snprintf(response, sizeof(response), "%s%s%s%ld%s\"%s\"", response_OK, response_AJ, response_CL, sizeof(response_default) + 1, response_NL, response_default);
             }
         } else {
-            snprintf(response, sizeof(response), "HTTP/1.1 406 Not Acceptable\r\n\r\n");
+            snprintf(response, sizeof(response), response_Not_Acceptable);
         }
 
 
         send(client_socket, response, strlen(response), 0);
-        printf("###\n###\n Sent a message:\n%s\n", response);
+        // printf("###\n###\n Sent a message:\n%s\n", response);
         close(client_socket);
     }
     close(server_socket);
-    free(buffer);
-}
-
-void small_server(const int port_number) {
-    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-    // Buffer for received messages
-    buffer = malloc(1024*sizeof(char));
-
-    // Buffer for building the response
-    char response[256];
-
-    // Geting name of Host
-    char hostname[64];
-    gethostname(hostname, sizeof(hostname) - 1);
-
-    // Geting name of CPU
-    char cpuname[64];
-    FILE * cpuinfo_fp = fopen("/proc/cpuinfo", "r");
-    int read_n = 0;
-    while ((read_n = fscanf(cpuinfo_fp, "%s", cpuname)) == 1) {
-        if (strstr(cpuname, "model") != NULL) {
-            fscanf(cpuinfo_fp, "%s", cpuname);
-            if (strstr(cpuname, "name") != NULL)
-                break;
-        }
-    }
-    fscanf(cpuinfo_fp, "%s", cpuname);
-    getc(cpuinfo_fp);
-    fgets(cpuname, 64, cpuinfo_fp);
-
-    // Getting cpuload (BLOCKING)
-    int cpuload = get_load();
-    printf("CPULOAD %d\n", cpuload);
-    char cpuload_string[14];
-
-    snprintf(cpuload_string, sizeof(cpuload_string), "%d %%", cpuload);
-
-    // Construct universal parts of response
-    const char * response_OK = "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/plain\r\nContent-Length: ";
-    const char * response_NL = "\r\n\r\n";
-
-    snprintf(response, sizeof(response), "%s%ld%s%s", response_OK, strlen(cpuload_string), response_NL, cpuload_string);
-
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(port_number);
-    server_address.sin_addr.s_addr = INADDR_ANY;
-
-    bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address));
-
-    listen(server_socket, 10);
-
-    int client_socket;
-    while (run) {
-        client_socket = accept(server_socket, NULL, NULL);
-        recv(client_socket, buffer, 1023, 0);
-        if (run == 0) {
-            close(client_socket);
-            break;
-        }
-        printf("###\n###\n Got a message:\n%s\n", buffer);
-
-        cpuload = get_load();
-        printf("CPULOAD %d\n", cpuload);
-        char cpuload_string[12];
-        snprintf(cpuload_string, sizeof(cpuload_string), "%d", cpuload);
-        snprintf(response, sizeof(response), "%s%ld%s%s", response_OK, strlen(cpuload_string), response_NL, cpuload_string);
-
-        send(client_socket, response, strlen(response), 0);
-        printf("###\n###\n Sent a message:\n%s\n", response);
-        close(client_socket);
-    }
     free(buffer);
 }
 
@@ -374,7 +319,7 @@ void close_handler(int dummy) {
 
 void error(int error_code, const char * error_message) {
     if (buffer != NULL) {
-        printf("Freeing buffer.\n");
+        fprintf(stderr, "Freeing buffer.\n");
         free(buffer);
     }
 
